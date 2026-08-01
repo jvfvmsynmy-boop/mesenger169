@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime Web Messenger</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .chat-container { width: 100%; max-width: 600px; height: 90vh; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
+        .chat-header { background: #0084ff; color: white; padding: 15px 20px; font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        #status { font-size: 12px; background: rgba(255, 255, 255, 0.2); padding: 3px 8px; border-radius: 10px; }
+        .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: #eef2f5; }
+        .message { max-width: 75%; padding: 10px 15px; border-radius: 15px; word-wrap: break-word; font-size: 14px; }
+        .message.incoming { background: #fff; color: #333; align-self: flex-start; border-bottom-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .message.outgoing { background: #0084ff; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .message.outgoing .text { color: #ffffff; }
+        .message .author { font-size: 11px; font-weight: bold; margin-bottom: 3px; color: #0084ff; }
+        .message.outgoing .author { color: #d0e8ff; }
+        .message .time { font-size: 9px; text-align: right; margin-top: 4px; opacity: 0.7; }
+        .chat-input-area { padding: 15px; background: #fff; display: flex; gap: 10px; border-top: 1px solid #ddd; }
+        .chat-input-area input { flex: 1; padding: 12px 15px; border: 1px solid #ccc; border-radius: 25px; outline: none; font-size: 14px; }
+        .chat-input-area input:focus { border-color: #0084ff; }
+        .chat-input-area button { background: #0084ff; color: white; border: none; padding: 0 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>Онлайн Мессенджер</span>
+            <span id="status">Подключение...</span>
+        </div>
+        <div class="chat-messages" id="messagesList"></div>
+        <form class="chat-input-area" id="chatForm">
+            <input type="text" id="messageInput" placeholder="Введите сообщение..." autocomplete="off" required>
+            <button type="submit">Отправить</button>
+        </form>
+    </div>
+
+    <script>
+        let username = prompt("Введите ваше имя:") || "Аноним";
+        username = username.trim();
+
+        const statusEl = document.getElementById('status');
+        const messagesList = document.getElementById('messagesList');
+        const chatForm = document.getElementById('chatForm');
+        const messageInput = document.getElementById('messageInput');
+
+        // Подключаемся к публичному WebSocket-серверу
+        const ws = new WebSocket('wss://echo.websocket.org');
+
+        ws.onopen = () => {
+            statusEl.textContent = 'В сети';
+            statusEl.style.background = 'rgba(46, 213, 115, 0.4)';
+        };
+
+        ws.onclose = () => {
+            statusEl.textContent = 'Не в сети';
+            statusEl.style.background = 'rgba(255, 71, 87, 0.4)';
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                // Пытаемся расшифровать пришедшее JSON-сообщение
+                const data = JSON.parse(event.data);
+                if (data && data.text) {
+                    appendMessage(data);
+                }
+            } catch (e) {
+                // Игнорируем технические системные ответы эхо-сервера
+            }
+        };
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            
+            if (text && ws.readyState === WebSocket.OPEN) {
+                const messageData = {
+                    name: username,
+                    text: text,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+
+                // Отправляем данные на сервер
+                ws.send(JSON.stringify(messageData));
+                messageInput.value = '';
+            }
+        });
+
+        function appendMessage(data) {
+            const messageDiv = document.createElement('div');
+            const isOutgoing = data.name === username;
+            
+            messageDiv.classList.add('message', isOutgoing ? 'outgoing' : 'incoming');
+
+            messageDiv.innerHTML = `
+                <div class="author">${escapeHtml(data.name)}</div>
+                <div class="text">${escapeHtml(data.text)}</div>
+                <div class="time">${data.time}</div>
+            `;
+
+            messagesList.appendChild(messageDiv);
+            messagesList.scrollTop = messagesList.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+    </script>
+</body>
+</html>
